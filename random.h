@@ -26,8 +26,3 @@ public:
         return get_distribution<T>(min, max)(m_gen);
     }
 };
-
-namespace G
-{
-    inline RNG rng;
-} // namespace G

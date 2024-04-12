@@ -150,6 +150,7 @@
   <ItemGroup>
     <ClInclude Include="battle.h" />
     <ClInclude Include="hash.h" />
+    <ClInclude Include="ironsides_imconfig.h" />
     <ClInclude Include="lib\imgui\imconfig.h" />
     <ClInclude Include="lib\imgui\misc\freetype\imgui_freetype.h" />
     <ClInclude Include="random.h" />

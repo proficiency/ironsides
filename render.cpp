@@ -2,6 +2,18 @@
 #include "ship.h"
 #include "battle.h"
 
+std::atomic<ImRect> g_titlebar_bounds;
+SDL_HitTestResult SDLCALL hit_test_callback(SDL_Window* win, const SDL_Point* area, void* userdata) 
+{
+    // todo: figure out a good solution for handling resize
+    auto titlebar_bounds = g_titlebar_bounds.load();
+
+    if (titlebar_bounds.Contains(ImVec2(area->x, area->y)))
+        return SDL_HITTEST_DRAGGABLE;
+
+    return SDL_HITTEST_NORMAL;
+}
+
 // https://github.com/ocornut/imgui/blob/master/examples/example_sdl3_opengl3/main.cpp
 bool Render::init()
 {
@@ -24,8 +36,10 @@ bool Render::init()
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
-    m_window                     = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", 1920, 1040, window_flags);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_BORDERLESS);
+    m_window                     = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", 1730, 825, window_flags);
+
+    SDL_SetWindowHitTest(m_window, hit_test_callback, nullptr);
 
     if (m_window == nullptr)
     {
@@ -62,10 +76,9 @@ bool Render::init()
     m_fonts[FONT_BIG]      = io.Fonts->AddFontFromFileTTF("./assets/fonts/Inconsolata-Bold.ttf", 20);
     m_fonts[FONT_BIGGEST]  = io.Fonts->AddFontFromFileTTF("./assets/fonts/Inconsolata-Bold.ttf", 24);
 
-    m_battle = std::make_unique<Battle>();
+    m_battle = std::make_unique<Battle>(get_shared_from_this());
     m_battle->init();
 
-    render();
     return true;
 }
 
@@ -74,11 +87,34 @@ void Render::render()
     ImVec4   clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     ImGuiIO& io          = ImGui::GetIO();
 
-    while (true)
+    while (m_quit)
     {
         SDL_Event event;
         while (SDL_PollEvent(&event))
-            ImGui_ImplSDL3_ProcessEvent(&event);        
+        {
+            switch (event.type)
+            {
+                case SDL_EVENT_MOUSE_WHEEL:
+                {
+                    if (event.wheel.y > 0) // scroll up
+                        m_battle->m_zoom_level = std::min(m_battle->m_zoom_level + 1, 4);
+
+                    else if (event.wheel.y < 0) // scroll down
+                        m_battle->m_zoom_level = std::max(m_battle->m_zoom_level - 1, 0);
+                }
+
+                case SDL_EVENT_QUIT:
+                {
+                    m_quit = false;
+                    break;
+                }
+
+                default:
+                    break;
+            }
+
+            ImGui_ImplSDL3_ProcessEvent(&event);
+        }
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -106,12 +142,40 @@ void Render::render()
     SDL_Quit();
 }
 
-void Render::update() 
+void Render::update()
 {
-    if (!ImGui::Begin("Ironsides", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse))
+    ImGui::SetNextWindowSize({1730, 825});
+    ImGui::SetNextWindowPos({});
+
+    if (!ImGui::Begin("Ironsides", &m_quit, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings))
         return;
 
+    //if (&g_titlebar_bounds.load()[0] == 0x0)
+    {
+        ImRect bounds = {};
+        bounds.Min    = ImGui::GetWindowPos();
+        bounds.Max    = bounds.Min + ImGui::GetItemRectSize();
+
+        g_titlebar_bounds.store(bounds);
+    }
+
+    // upper-left corner of content region, in window-space.
+    m_min = ImGui::GetWindowContentRegionMin();
+
+    // bottom-right corner of the content region, in window-space.
+    m_max = ImGui::GetWindowContentRegionMax();
+
+    // convert min and max to screen-space
+    m_min += ImGui::GetWindowPos();
+    m_max += ImGui::GetWindowPos();
+
+    // we'll be doing all of our rendering with ImGui's drawlist class
+    m_dl = ImGui::GetForegroundDrawList();
+
+    m_dl->AddRectFilled(m_min, m_max, IM_COL32(0, 0, 255, 255));
+
     m_battle->update();
+    m_battle->draw();
 
     ImGui::End();
 }
