@@ -70,12 +70,11 @@ void Battle::control_ai()
 {
     for (auto& ship : m_enemy_ships)
     {
-        if (glm::length(ship->m_dst) == 0.0f || glm::length(ship->m_dst - ship->m_pos) < 1.0f)
+        if (glm::length(ship->m_dst) == 0.0f || glm::distance(ship->m_dst, ship->m_pos) < 1.0f)
         {
-            // todo: this is wrong
-            glm::vec2 window_min = ImGui::GetWindowContentRegionMin();
-            glm::vec2 window_max = ImGui::GetWindowContentRegionMax();
-
+            glm::vec2 window_min = ImGui::GetWindowContentRegionMin() - ImGui::GetWindowPos();
+            glm::vec2 window_max = ImGui::GetWindowContentRegionMax() - ImGui::GetWindowPos();
+            
             ship->m_dst.x = m_rng.get_random(window_min.x, window_max.x);
             ship->m_dst.y = m_rng.get_random(window_min.y, window_max.y);
         }

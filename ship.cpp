@@ -108,7 +108,7 @@ void Ship::update_destination(const glm::vec2& dst)
 void Ship::update_wake()
 {
     // todo: find a good distance
-    if (m_wake_nodes.empty() || glm::length(m_pos - m_wake_nodes.back()) > 25.0f)
+    if (m_wake_nodes.empty() || glm::distance(m_pos, m_wake_nodes.back()) > 25.0f)
         m_wake_nodes.push_back(m_pos);
 
     if (m_wake_nodes.size() > 5u)

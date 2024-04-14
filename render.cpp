@@ -101,6 +101,8 @@ void Render::render()
 
                     else if (event.wheel.y < 0) // scroll down
                         m_battle->m_zoom_level = std::max(m_battle->m_zoom_level - 1, 0);
+
+                    break;
                 }
 
                 case SDL_EVENT_QUIT:
