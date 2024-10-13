@@ -21,8 +21,13 @@
 #include <filesystem>
 #include <string>
 #include <atomic>
+#include <format>
+#include <numeric>
+#include <map>
+#include <print>
 
-#include <gl\GL.h>
+#include "shaders.h"
+#include <glad/glad.h>
 #include <glm\glm.hpp>
 #include <glm\ext.hpp>
 #include <glm\gtx\vector_angle.hpp>
@@ -37,13 +42,15 @@
 #include <imgui_impl_opengl3.h>
 
 #include "hash.h"
+#include "random.h"
 
 class Image
 {
 public:
-    GLuint m_texture;
-    Hash   m_hash;
-    ImVec2 m_size;
+    GLuint       m_texture;
+    u32          m_hash;
+    ImVec2       m_size;
+    SDL_Surface* m_surface;
 };
 
 class Images
@@ -51,17 +58,14 @@ class Images
     std::vector<Image> m_images;
 
 public:
-    bool load(const std::filesystem::path& path, std::string_view name)
+    bool load(const std::filesystem::path& path, std::string_view name, GLint wrap_param = GL_CLAMP_TO_EDGE)
     {
         Image img{};
 
         SDL_Surface* surface = IMG_Load(path.string().c_str());
-        if (!surface)
-        {
+        if (surface == nullptr)
             return false;
-        }
 
-        GLenum           mode   = GL_RGBA;
         SDL_PixelFormat* target = SDL_CreatePixelFormat(SDL_PIXELFORMAT_RGBA32);
         surface                 = SDL_ConvertSurface(surface, target);
 
@@ -70,15 +74,16 @@ public:
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_param);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_param);
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
 
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        img.m_hash = Fnv_Hash::hash(name);
-        img.m_size = {(float)surface->w, (float)surface->h};
+        img.m_hash    = Fnv_Hash::hash(name);
+        img.m_size    = {(float)surface->w, (float)surface->h};
+        img.m_surface = surface;
 
         m_images.push_back(img);
 
@@ -90,7 +95,7 @@ public:
         return get(Fnv_Hash::hash(name));
     }
 
-    Image get(Hash hash)
+    Image get(u32 hash)
     {
         for (auto& img : m_images)
         {
@@ -114,29 +119,74 @@ enum FONT_SIZES
 };
 
 class Battle;
-class Render : public std::enable_shared_from_this<Render>
+
+class FPS_Counter
+{
+    float              m_last_update_time;
+    std::vector<float> m_fps_history;
+    std::string        m_display;
+
+public:
+    FPS_Counter() : m_last_update_time(), m_fps_history(), m_display() {}
+
+    std::string get_fps()
+    {
+        m_fps_history.push_back(ImGui::GetIO().Framerate);
+
+        if (m_display.empty() || ImGui::GetTime() - m_last_update_time > 0.5f)
+        {
+            const float average_fps = std::accumulate(m_fps_history.begin(), m_fps_history.end(), 0.0f) / m_fps_history.size();
+
+            m_display          = std::format("FPS: {:.1f} Average: {:.1f}", m_fps_history.back(), average_fps);
+            m_last_update_time = ImGui::GetTime();
+        }
+
+        return m_display;
+    }
+};
+
+class Render
 {
     SDL_Window*             m_window;
     SDL_GLContext           m_gl_ctx;
     std::shared_ptr<Battle> m_battle;
     bool                    m_quit;
+    FPS_Counter             m_fps_counter;
+
+    bool load_images();
+    void update();
 
 public:
-    Render() : m_quit(true) {}
-
-    std::array<ImFont*, FONT_MAX> m_fonts;
-    ImVec2                        m_min;
-    ImVec2                        m_max;
-    ImDrawList*                   m_dl;
-    Images                        m_images;
-
-    std::shared_ptr<Render> get_shared_from_this()
+    // todo: maybe this should hold an std::optional<Shader> object, that would look nice in the rendering code
+    class Layer
     {
-        return shared_from_this();
-    }
+        std::unique_ptr<ImDrawData> make_drawdata();
+
+    public:
+        GLuint                      m_fbo;
+        GLuint                      m_rbo;
+        GLuint                      m_texture;
+        std::shared_ptr<ImDrawList> m_dl;
+        std::unique_ptr<ImDrawData> m_drawdata;
+
+        Layer();
+        void on_new_frame();
+        void on_render();
+    };
+
+    Render() : m_quit(true), m_screen_size(1730.0f, 825.0f) {}
+
+    ImVec2                                             m_min;
+    ImVec2                                             m_max;
+    ImDrawList*                                        m_dl;
+    std::map<std::string, Layer>                       m_layers;
+    Images                                             m_images;
+    Shaders                                            m_shaders;
+    ImVec2                                             m_screen_size;
 
     bool init();
     void render();
-
-    void update();
+    std::shared_ptr<ImDrawList> get_dl(std::string_view name);
 };
+
+inline std::shared_ptr<Render> g_render;

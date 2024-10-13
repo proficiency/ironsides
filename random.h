@@ -26,3 +26,5 @@ public:
         return get_distribution<T>(min, max)(m_gen);
     }
 };
+
+inline RNG g_rng;

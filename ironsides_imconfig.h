@@ -115,6 +115,15 @@
         return glm::vec4(x, y, z, w);                                        \
     }
 
+// todo: move this
+namespace glm
+{
+    inline bool near_zero(const glm::vec2& v)
+    {
+        return std::abs(v.x) < 1e-6f && std::abs(v.y) < 1e-6f;
+    }
+}
+
 //---- ...Or use Dear ImGui's own very basic math operators.
 #define IMGUI_DEFINE_MATH_OPERATORS
 
